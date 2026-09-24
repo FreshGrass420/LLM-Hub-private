@@ -18,12 +18,16 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
       - name: Generate local.properties
         working-directory: android
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "DEBUG_PREMIUM=true" >> local.properties
-          echo "HF_TOKEN=[redacted] secrets.HF_TOKEN }}" >> local.properties
+          echo "HF_TOKEN=${{ secrets.HF_TOKEN }}" >> local.properties
 
       - name: Grant execute permission for gradlew
         working-directory: android
