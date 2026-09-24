@@ -8,17 +8,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.security.MessageDigest
 
 /**
  * Manages the state and security of "Kid Mode".
- * Stores a PIN and an enabled flag in EncryptedSharedPreferences for security.
+ * Stores a hashed PIN and an enabled flag in EncryptedSharedPreferences.
+ * The PIN is stored as a salted SHA-256 hash, never in plaintext.
  */
 class KidModeManager(context: Context) {
 
     private val prefs: SharedPreferences
 
     init {
-        // Use EncryptedSharedPreferences to securely store the PIN
+        // Use EncryptedSharedPreferences to securely store the PIN hash
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -41,7 +43,7 @@ class KidModeManager(context: Context) {
         }
         prefs.edit().apply {
             putBoolean(KEY_IS_ENABLED, true)
-            putString(KEY_PIN, pin) // In a real app, hash this. EncryptedSharedPreferences adds a layer of security.
+            putString(KEY_PIN, hashPin(pin))
             apply()
         }
         _isKidModeEnabled.value = true
@@ -49,30 +51,49 @@ class KidModeManager(context: Context) {
     }
 
     fun disableKidMode(pin: String): Boolean {
-        val storedPin = prefs.getString(KEY_PIN, "")
-        if (storedPin == pin) {
-            prefs.edit().apply {
-                putBoolean(KEY_IS_ENABLED, false)
-                remove(KEY_PIN) // Clear the PIN so it must be reset next time
-                apply()
-            }
-            _isKidModeEnabled.value = false
-            Log.d("KidModeManager", "Kid Mode Disabled")
-            return true
+        if (!verifyPin(pin)) return false
+        prefs.edit().apply {
+            putBoolean(KEY_IS_ENABLED, false)
+            remove(KEY_PIN) // Clear the PIN so it must be reset next time
+            apply()
         }
-        Log.w("KidModeManager", "Kid Mode Disable Failed: Incorrect PIN")
-        return false
+        _isKidModeEnabled.value = false
+        Log.d("KidModeManager", "Kid Mode Disabled")
+        return true
     }
 
     fun verifyPin(pin: String): Boolean {
-        val storedPin = prefs.getString(KEY_PIN, "")
-        return storedPin == pin
+        val storedHash = prefs.getString(KEY_PIN, null) ?: return false
+        return constantTimeEquals(storedHash, hashPin(pin))
+    }
+
+    private fun hashPin(pin: String): String {
+        val salt = prefs.getString(KEY_SALT, null) ?: newSalt().also {
+            prefs.edit().putString(KEY_SALT, it).apply()
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest((salt + pin).toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun newSalt(): String {
+        val bytes = ByteArray(16)
+        java.security.SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun constantTimeEquals(a: String, b: String): Boolean {
+        if (a.length != b.length) return false
+        var result = 0
+        for (i in a.indices) result |= a[i].code xor b[i].code
+        return result == 0
     }
 
     companion object {
         private const val KEY_IS_ENABLED = "is_enabled"
         private const val KEY_PIN = "pin"
-        
+        private const val KEY_SALT = "pin_salt"
+
         // The system prompt to inject when Kid Mode is enabled
         const val SYSTEM_INSTRUCTION = "You are a helpful assistant for an adolescent. Answer innocent educational chats, translations, and code requests with the level of detail appropriate for a 14-year-old. Refer sexually suggestive, violent, or illegal content to a trusted adult."
     }

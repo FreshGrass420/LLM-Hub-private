@@ -85,21 +85,7 @@ RULES:
                 }
             } catch (_: Exception) {}
 
-        // 2. Fallback to ip-api.com (fast, free IP geolocation)
-        try {
-            val conn = URL("http://ip-api.com/json").openConnection()
-            conn.connectTimeout = 3000
-            conn.readTimeout = 3000
-            val json = conn.getInputStream().bufferedReader().use { it.readText() }
-            val obj = org.json.JSONObject(json)
-            if (obj.optString("status") == "success") {
-                val lat = obj.optDouble("lat", Double.NaN)
-                val lon = obj.optDouble("lon", Double.NaN)
-                if (!lat.isNaN() && !lon.isNaN()) return@runBlocking Pair(lat, lon)
-            }
-        } catch (_: Exception) {}
-
-        // 3. Fallback to ipapi.co
+        // 2. Fallback to ipapi.co (HTTPS only — no plaintext HTTP geolocation)
         try {
             val conn = URL("https://ipapi.co/json/").openConnection()
             conn.connectTimeout = 3000
@@ -111,7 +97,7 @@ RULES:
             if (!lat.isNaN() && !lon.isNaN()) return@runBlocking Pair(lat, lon)
         } catch (_: Exception) {}
 
-        // 4. Fallback to ipinfo.io
+        // 3. Fallback to ipinfo.io
         try {
             val conn = URL("https://ipinfo.io/json").openConnection()
             conn.connectTimeout = 3000

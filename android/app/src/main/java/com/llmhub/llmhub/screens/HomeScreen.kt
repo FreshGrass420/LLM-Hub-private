@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
 import com.llmhub.llmhub.R
-import com.llmhub.llmhub.repository.GithubRepository
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import com.llmhub.llmhub.data.ThemePreferences
@@ -213,13 +212,9 @@ fun HomeScreen(
                     }
                     */
                     
-                    // GitHub Stars
+                    // GitHub Stars (local cached value only — no per-launch network
+                    // call, so no IP/User-Agent telemetry hits GitHub's API logs)
                     val stars by preferences.githubStars.collectAsState(initial = 0)
-                    
-                    // Sync stars once
-                    LaunchedEffect(Unit) {
-                        GithubRepository.refreshStars(preferences)
-                    }
 
                     if (stars > 0) {
                         Surface(
